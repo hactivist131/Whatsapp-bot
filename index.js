@@ -10,6 +10,7 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log("Server running on port", PORT)
 })
+
 const { 
   default: makeWASocket,
   useMultiFileAuthState,
@@ -18,6 +19,7 @@ const {
 } = require("@whiskeysockets/baileys")
 
 const P = require("pino")
+const qrcode = require("qrcode-terminal") // QR generator
 
 async function startBot() {
 
@@ -41,7 +43,7 @@ async function startBot() {
     // QR CODE (for linking)
     if (qr) {
       console.log("🔳 Scan this QR code in WhatsApp:")
-      console.log(qr)
+      qrcode.generate(qr, { small: true }) // shows QR visually
     }
 
     if (connection === "open") {
