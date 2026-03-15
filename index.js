@@ -1,132 +1,57 @@
-const express = require("express")
-const app = express()
-
 const { 
-default: makeWASocket,
-useMultiFileAuthState,
-DisconnectReason,
-fetchLatestBaileysVersion
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason
 } = require("@whiskeysockets/baileys")
 
 const P = require("pino")
 
-app.get("/", (req, res) => {
-res.send("WhatsApp Bot Running 🚀")
-})
-
-app.listen(process.env.PORT || 3000, () => {
-console.log("Server running")
-})
-
 async function startBot() {
 
-const { state, saveCreds } = await useMultiFileAuthState("auth")
-const { version } = await fetchLatestBaileysVersion()
+  const { state, saveCreds } = await useMultiFileAuthState("auth")
+  const { version } = await fetchLatestBaileysVersion()
 
-const sock = makeWASocket({
-version,
-auth: state,
-printQRInTerminal: true,
-logger: P({ level: "silent" })
-})
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger: P({ level: "silent" })
+  })
 
-sock.ev.on("creds.update", saveCreds)
+  // Save login session
+  sock.ev.on("creds.update", saveCreds)
 
-sock.ev.on("messages.upsert", async ({ messages }) => {
+  // Handle connection + QR
+  sock.ev.on("connection.update", (update) => {
 
-for (const msg of messages) {
+    const { connection, lastDisconnect, qr } = update
 
-if (!msg.message) continue
+    // QR CODE (for linking)
+    if (qr) {
+      console.log("🔳 Scan this QR code in WhatsApp:")
+      console.log(qr)
+    }
 
-const jid = msg.key.remoteJid
+    if (connection === "open") {
+      console.log("✅ WhatsApp Connected Successfully!")
+    }
 
-// STATUS AUTO VIEW
-if (jid === "status@broadcast") {
+    if (connection === "close") {
 
-await sock.readMessages([msg.key])
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !==
+        DisconnectReason.loggedOut
 
-await sock.sendMessage(jid, {
-react: {
-text: "❤️",
-key: msg.key
-}
-})
+      if (shouldReconnect) {
+        console.log("♻️ Reconnecting...")
+        startBot()
+      } else {
+        console.log("❌ Logged out. Please delete auth folder and restart.")
+      }
 
-continue
-}
+    }
 
-const text =
-msg.message.conversation ||
-msg.message.extendedTextMessage?.text
-
-if (!text) continue
-
-await sock.sendPresenceUpdate("composing", jid)
-
-const command = text.toLowerCase()
-
-if (command === "ping") {
-
-await sock.sendMessage(jid, {
-text: "Pong 🏓 Bot working"
-})
-
-}
-
-if (command === "menu") {
-
-const menu = `
-╔═══『 WHATSAPP BOT 』
-║
-║  ping
-║  menu
-║
-║ Features
-║ ✔ Auto React
-║ ✔ Auto Typing
-║ ✔ Auto View Status
-║ ✔ Status React
-║
-╚══════════════
-`
-
-await sock.sendMessage(jid, { text: menu })
-
-}
-
-// AUTO REACT
-await sock.sendMessage(jid, {
-react: {
-text: "🔥",
-key: msg.key
-}
-})
-
-}
-
-})
-
-sock.ev.on("connection.update", (update) => {
-
-const { connection, lastDisconnect } = update
-
-if (connection === "close") {
-
-const shouldReconnect =
-lastDisconnect?.error?.output?.statusCode !==
-DisconnectReason.loggedOut
-
-if (shouldReconnect) {
-startBot()
-}
-
-}
-
-if (connection === "open") {
-console.log("WhatsApp Bot Connected ✅")
-}
-
-})
+  })
 
 }
 
