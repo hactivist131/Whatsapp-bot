@@ -2,87 +2,86 @@ const express = require("express")
 const app = express()
 
 const { 
-  default: makeWASocket, 
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
+default: makeWASocket,
+useMultiFileAuthState,
+DisconnectReason,
+fetchLatestBaileysVersion
 } = require("@whiskeysockets/baileys")
 
 const P = require("pino")
 
-// Render web server
 app.get("/", (req, res) => {
-  res.send("WhatsApp Bot Running 🚀")
+res.send("WhatsApp Bot Running 🚀")
 })
 
 app.listen(process.env.PORT || 3000, () => {
-  console.log("Server running")
+console.log("Server running")
 })
 
 async function startBot() {
 
-  const { state, saveCreds } = await useMultiFileAuthState("auth")
-  const { version } = await fetchLatestBaileysVersion()
+const { state, saveCreds } = await useMultiFileAuthState("auth")
+const { version } = await fetchLatestBaileysVersion()
 
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    printQRInTerminal: true,
-    logger: P({ level: "silent" })
-  })
+const sock = makeWASocket({
+version,
+auth: state,
+printQRInTerminal: true,
+logger: P({ level: "silent" })
+})
 
-  sock.ev.on("creds.update", saveCreds)
+sock.ev.on("creds.update", saveCreds)
 
-  // AUTO VIEW STATUS
-  sock.ev.on("messages.upsert", async ({ messages }) => {
+sock.ev.on("messages.upsert", async ({ messages }) => {
 
-    for (const msg of messages) {
+for (const msg of messages) {
 
-      if (!msg.message) continue
+if (!msg.message) continue
 
-      const jid = msg.key.remoteJid
+const jid = msg.key.remoteJid
 
-      // View status automatically
-      if (jid === "status@broadcast") {
+// STATUS AUTO VIEW
+if (jid === "status@broadcast") {
 
-        await sock.readMessages([msg.key])
+await sock.readMessages([msg.key])
 
-        await sock.sendMessage(jid, {
-          react: {
-            text: "❤️",
-            key: msg.key
-          }
-        })
+await sock.sendMessage(jid, {
+react: {
+text: "❤️",
+key: msg.key
+}
+})
 
-        return
-      }
+continue
+}
 
-      const text =
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text
+const text =
+msg.message.conversation ||
+msg.message.extendedTextMessage?.text
 
-      if (!text) return
+if (!text) continue
 
-      // Auto typing
-      await sock.sendPresenceUpdate("composing", jid)
+await sock.sendPresenceUpdate("composing", jid)
 
-      const command = text.toLowerCase()
+const command = text.toLowerCase()
 
-      // Ping command
-      if (command === "ping") {
-        await sock.sendMessage(jid, { text: "Pong 🏓 Bot is alive" })
-      }
+if (command === "ping") {
 
-      // Menu command
-      if (command === "menu") {
+await sock.sendMessage(jid, {
+text: "Pong 🏓 Bot working"
+})
 
-        const menu = `
+}
+
+if (command === "menu") {
+
+const menu = `
 ╔═══『 WHATSAPP BOT 』
 ║
-║ 1. ping
-║ 2. menu
+║  ping
+║  menu
 ║
-║ Features:
+║ Features
 ║ ✔ Auto React
 ║ ✔ Auto Typing
 ║ ✔ Auto View Status
@@ -91,19 +90,44 @@ async function startBot() {
 ╚══════════════
 `
 
-        await sock.sendMessage(jid, { text: menu })
-      }
+await sock.sendMessage(jid, { text: menu })
 
-      // Auto react to every message
-      await sock.sendMessage(jid, {
-        react: {
-          text: "🔥",
-          key: msg.key
-        }
-      })
+}
 
-    }
+// AUTO REACT
+await sock.sendMessage(jid, {
+react: {
+text: "🔥",
+key: msg.key
+}
+})
 
-  })
+}
 
-  //
+})
+
+sock.ev.on("connection.update", (update) => {
+
+const { connection, lastDisconnect } = update
+
+if (connection === "close") {
+
+const shouldReconnect =
+lastDisconnect?.error?.output?.statusCode !==
+DisconnectReason.loggedOut
+
+if (shouldReconnect) {
+startBot()
+}
+
+}
+
+if (connection === "open") {
+console.log("WhatsApp Bot Connected ✅")
+}
+
+})
+
+}
+
+startBot()
